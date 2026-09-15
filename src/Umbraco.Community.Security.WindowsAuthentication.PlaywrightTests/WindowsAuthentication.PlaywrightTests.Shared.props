@@ -1,0 +1,60 @@
+<Project>
+
+  <!--
+    Shared definition for the two Playwright test projects:
+
+      Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests.v17  -> runs TestSite.v17 (Umbraco 17)
+      Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests.v18  -> runs TestSite.v18 (Umbraco 18)
+
+    This directory (Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests) is NOT a project.
+    It holds the test sources; both wrappers compile them, so every browser test runs against a real
+    Umbraco 17 site and a real Umbraco 18 site, each under Kestrel and under IIS Express with
+    Windows Authentication.
+
+    Each wrapper sets:
+
+      TestSiteName         the test site project to build and launch
+      IisExpressHttpsPort  the IIS Express port for its runs (44300-44399), distinct per major so
+                           both suites and the developer's own site can run side by side
+
+    Add new test files here; both wrappers pick them up automatically.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.15.0" PrivateAssets="all" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Build order only: the tests launch the built test site, they don't reference its code. -->
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\$(TestSiteName)\$(TestSiteName).csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="TestSiteName" Value="$(TestSiteName)" />
+    <AssemblyMetadata Include="IisExpressHttpsPort" Value="$(IisExpressHttpsPort)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <!-- Shared test sources. Build output in this folder is excluded. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)**\*.cs"
+             Exclude="$(MSBuildThisFileDirectory)bin\**\*.cs;$(MSBuildThisFileDirectory)obj\**\*.cs" />
+  </ItemGroup>
+
+</Project>

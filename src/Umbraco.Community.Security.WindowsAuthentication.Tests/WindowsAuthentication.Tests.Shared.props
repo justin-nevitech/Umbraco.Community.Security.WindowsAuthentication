@@ -1,0 +1,55 @@
+<Project>
+
+  <!--
+    Shared definition for the two test projects that run this suite:
+
+      Umbraco.Community.Security.WindowsAuthentication.Tests.v17\...v17.csproj  -> against the Umbraco 17 package
+      Umbraco.Community.Security.WindowsAuthentication.Tests.v18\...v18.csproj  -> against the Umbraco 18 package
+
+    This directory (Umbraco.Community.Security.WindowsAuthentication.Tests) is NOT a project. It is the
+    single home for the test sources, mirroring how Umbraco.Community.Security.WindowsAuthentication
+    holds the shared product sources. Both wrappers compile these same files, so every test runs
+    against both Umbraco majors.
+
+    Add new test files here; both wrappers pick them up automatically.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- Only the COMPILE globs are replaced: the sources are shared from this directory and the
+         default glob is relative to each wrapper's own folder. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
+    <PackageReference Include="NSubstitute" Version="6.2.0" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.15.0" PrivateAssets="all" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <!-- Shared test sources. Build output in this folder is excluded. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)**\*.cs"
+             Exclude="$(MSBuildThisFileDirectory)bin\**\*.cs;$(MSBuildThisFileDirectory)obj\**\*.cs" />
+  </ItemGroup>
+
+</Project>

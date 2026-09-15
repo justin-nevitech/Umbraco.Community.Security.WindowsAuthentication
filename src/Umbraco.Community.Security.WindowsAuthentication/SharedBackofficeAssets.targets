@@ -1,0 +1,61 @@
+<Project>
+
+  <!--
+    Imported by BOTH wrapper package projects (.v17 and .v18), neither of which has sources
+    or assets of its own.
+
+    The built backoffice assets (wwwroot/App_Plugins) live in the shared source directory
+    (Umbraco.Community.Security.WindowsAuthentication) alongside the shared C# sources. They cannot
+    simply be <Content Include>d from there with Link metadata, because of how the SDK discovers
+    static web assets:
+
+        ResolveProjectStaticWebAssets calls DefineStaticWebAssets with:
+            CandidateAssets   = @(Content) matching "wwwroot/**"
+            ContentRoot       = $(MSBuildProjectDirectory)\wwwroot\    (hardcoded)
+
+    A linked file matches the pattern but is then recorded against THIS project's wwwroot,
+    which would not exist - producing a development manifest that points at a missing
+    directory, so the site fails at startup with DirectoryNotFoundException from
+    StaticWebAssetsLoader.
+
+    So the assets are mirrored into this project's own wwwroot, giving the pipeline a real
+    directory that matches the content root it records. The mirrored folder is build output
+    and is git-ignored.
+
+    The mirror runs at two points because the candidate @(Content) items come from the default
+    item globs, which are expanded during project EVALUATION - before any target runs:
+
+      * after Restore, so that the build-phase evaluation of a cold build (fresh clone or
+        cleaned tree, where the folder does not exist yet) already sees the files;
+      * before ResolveProjectStaticWebAssets, to keep the mirror current within a build when
+        the client assets have been rebuilt.
+
+    The client script's file name carries a content hash, so files that are no longer in the
+    shared folder (an older hash) are removed from the mirror rather than shipped alongside the
+    current one.
+  -->
+
+  <Target Name="MirrorSharedBackofficeAssets"
+          AfterTargets="Restore"
+          BeforeTargets="ResolveProjectStaticWebAssets">
+
+    <Error Condition="'$(WindowsAuthenticationSharedDir)' == ''"
+           Text="WindowsAuthenticationSharedDir is not set. SharedBackofficeAssets.targets must be imported after WindowsAuthentication.Shared.props." />
+
+    <ItemGroup>
+      <_WindowsAuthenticationSharedAsset Include="$(WindowsAuthenticationSharedDir)wwwroot\**\*" />
+      <_WindowsAuthenticationMirroredAsset Include="@(_WindowsAuthenticationSharedAsset->'$(MSBuildProjectDirectory)\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" />
+      <_WindowsAuthenticationStaleAsset Include="$(MSBuildProjectDirectory)\wwwroot\**\*" Exclude="@(_WindowsAuthenticationMirroredAsset)" />
+    </ItemGroup>
+
+    <Error Condition="'@(_WindowsAuthenticationSharedAsset)' == ''"
+           Text="No backoffice assets found in $(WindowsAuthenticationSharedDir)wwwroot. Build the TypeScript client first (cd Client &amp;&amp; npm install &amp;&amp; npm run build)." />
+
+    <Delete Files="@(_WindowsAuthenticationStaleAsset)" />
+
+    <Copy SourceFiles="@(_WindowsAuthenticationSharedAsset)"
+          DestinationFiles="@(_WindowsAuthenticationMirroredAsset)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

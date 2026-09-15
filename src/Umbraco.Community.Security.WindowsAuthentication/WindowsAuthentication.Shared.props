@@ -1,0 +1,76 @@
+<Project>
+
+  <!--
+    Shared definition for the two package projects that build this component:
+
+      Umbraco.Community.Security.WindowsAuthentication.v17\...v17.csproj  -> Umbraco 17
+      Umbraco.Community.Security.WindowsAuthentication.v18\...v18.csproj  -> Umbraco 18
+
+    This directory (Umbraco.Community.Security.WindowsAuthentication) is NOT a project. It is the
+    single home for the shared C# sources, the TypeScript client and the built backoffice assets.
+    The two wrapper projects above compile these files and produce the same assembly name and
+    PackageId; only the Umbraco package range and the UMBRACO_18 compilation symbol differ.
+
+    Why two project files rather than one wide version range: each Umbraco major gets its own
+    restore, so both test sites can live in one solution and run side by side, and a release can
+    carry a version-aligned major (17.x for Umbraco 17, 18.x for Umbraco 18). See docs/BUILDING.md.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <RootNamespace>Umbraco.Community.Security.WindowsAuthentication</RootNamespace>
+    <AssemblyName>Umbraco.Community.Security.WindowsAuthentication</AssemblyName>
+
+    <!--
+      Only the COMPILE globs are replaced (the sources are shared from this directory and the
+      default glob is relative to each project's own folder). Default Content/None items stay
+      enabled: the Razor SDK's static web asset discovery is driven by them, so disabling all
+      default items silently drops wwwroot/App_Plugins from the produced package.
+    -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+
+    <!-- Directory holding the shared sources and the built backoffice assets. Each wrapper
+         project mirrors wwwroot into its own folder - see SharedBackofficeAssets.targets. -->
+    <WindowsAuthenticationSharedDir>$(MSBuildThisFileDirectory)</WindowsAuthenticationSharedDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>Umbraco.Community.Security.WindowsAuthentication</Product>
+    <PackageId>Umbraco.Community.Security.WindowsAuthentication</PackageId>
+    <Title>Windows Authentication</Title>
+    <Description>Lets the Umbraco backoffice run behind IIS Windows Authentication with anonymous authentication disabled, without affecting front-end, member or custom authentication.</Description>
+    <PackageTags>umbraco;umbraco-marketplace;security;authentication;windows-authentication;iis;intranet</PackageTags>
+    <Authors>Justin Neville</Authors>
+    <Company>Nevitech IT Solutions Ltd</Company>
+    <Copyright>$([System.DateTime]::UtcNow.ToString(`yyyy`)) © Justin Neville</Copyright>
+    <PackageProjectUrl>https://github.com/justin-nevitech/Umbraco.Community.Security.WindowsAuthentication</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/justin-nevitech/Umbraco.Community.Security.WindowsAuthentication</RepositoryUrl>
+    <PackageReadmeFile>README_nuget.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <!-- Shared C# sources. The Client folder (TypeScript) and build output are excluded. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)**\*.cs"
+             Exclude="$(MSBuildThisFileDirectory)bin\**\*.cs;$(MSBuildThisFileDirectory)obj\**\*.cs;$(MSBuildThisFileDirectory)Client\**\*.cs" />
+  </ItemGroup>
+
+  <!-- Keep the TypeScript client's manifest visible in the IDE without packing it (the built
+       copy under wwwroot/App_Plugins is what ships). -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)Client\public\umbraco-package.json"
+          Link="Client\umbraco-package.json" Pack="false" />
+  </ItemGroup>
+
+  <!-- Packaged docs. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\..\docs\README_nuget.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\docs\icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,15 @@
+{
+  "id": "Umbraco.Community.Security.WindowsAuthentication",
+  "name": "Umbraco.Community.Security.WindowsAuthentication",
+  "version": "0.1.0",
+  "allowTelemetry": false,
+  "allowPublicAccess": true,
+  "extensions": [
+    {
+      "type": "appEntryPoint",
+      "alias": "Umbraco.Community.Security.WindowsAuthentication.AppEntryPoint",
+      "name": "Windows Authentication",
+      "js": "/App_Plugins/WindowsAuthentication/windows-authentication-JVeUi8wP.js"
+    }
+  ]
+}

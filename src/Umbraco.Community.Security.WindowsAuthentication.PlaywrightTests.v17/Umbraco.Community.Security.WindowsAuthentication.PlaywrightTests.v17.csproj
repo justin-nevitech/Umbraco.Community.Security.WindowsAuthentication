@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runs the shared Playwright suite against the Umbraco 17 test site.
+    Owns no sources of its own - see ..\Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests.
+  -->
+
+  <Import Project="..\Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests\WindowsAuthentication.PlaywrightTests.Shared.props" />
+
+  <PropertyGroup>
+    <AssemblyName>Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests.v17</AssemblyName>
+    <RootNamespace>Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests</RootNamespace>
+    <TestSiteName>Umbraco.Community.Security.WindowsAuthentication.TestSite.v17</TestSiteName>
+    <IisExpressHttpsPort>44391</IisExpressHttpsPort>
+  </PropertyGroup>
+
+</Project>

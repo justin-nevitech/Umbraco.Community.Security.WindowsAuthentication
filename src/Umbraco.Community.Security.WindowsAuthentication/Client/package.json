@@ -1,0 +1,14 @@
+{
+  "name": "umbraco-community-security-windows-authentication",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && vite build && node scripts/update-manifest.js",
+    "watch": "vite build --watch"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

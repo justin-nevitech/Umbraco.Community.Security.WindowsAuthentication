@@ -1,0 +1,23 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Cms.Web.Website.Controllers
+@using Umbraco.Extensions
+@{
+    Layout = null;
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>@Model.Name</title>
+</head>
+<body>
+    <h1 id="page-name">@Model.Name</h1>
+    @using (Html.BeginUmbracoForm<UmbLoginController>("HandleLogin"))
+    {
+        <label>Username <input id="username" name="loginModel.Username" /></label>
+        <label>Password <input id="password" name="loginModel.Password" type="password" /></label>
+        <div id="errors">@Html.ValidationSummary("loginModel", true, "")</div>
+        <button id="login" type="submit">Log in</button>
+    }
+</body>
+</html>

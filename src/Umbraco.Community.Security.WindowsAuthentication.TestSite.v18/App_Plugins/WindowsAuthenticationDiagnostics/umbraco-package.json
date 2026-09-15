@@ -1,0 +1,25 @@
+{
+  "id": "WindowsAuthenticationDiagnostics",
+  "name": "Windows Authentication Diagnostics",
+  "version": "0.1.0",
+  "allowTelemetry": false,
+  "extensions": [
+    {
+      "type": "dashboard",
+      "alias": "WindowsAuthenticationDiagnostics.Dashboard",
+      "name": "Windows Authentication Diagnostics",
+      "element": "/App_Plugins/WindowsAuthenticationDiagnostics/diagnostics-dashboard.js",
+      "weight": 1000,
+      "meta": {
+        "label": "Windows Authentication",
+        "pathname": "windows-authentication"
+      },
+      "conditions": [
+        {
+          "alias": "Umb.Condition.SectionAlias",
+          "match": "Umb.Section.Settings"
+        }
+      ]
+    }
+  ]
+}

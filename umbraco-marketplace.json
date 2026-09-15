@@ -1,0 +1,15 @@
+{
+    "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
+    "AuthorDetails": {
+      "Name": "Justin Neville",
+      "ImageUrl": "https://github.com/justin-nevitech.png"
+    },
+    "Category": "Developer Tools",
+    "Description": "Lets the Umbraco backoffice run behind IIS Windows Authentication with anonymous authentication disabled, without affecting front-end, member or custom authentication.",
+    "LicenseTypes": [ "Free" ],
+    "IssueTrackerUrl": "https://github.com/justin-nevitech/Umbraco.Community.Security.WindowsAuthentication/issues",
+    "DocumentationUrl": "https://github.com/justin-nevitech/Umbraco.Community.Security.WindowsAuthentication",
+    "PackageType": "Package",
+    "Tags": ["Security", "Authentication", "Windows Authentication", "IIS", "Intranet"],
+    "Title": "Windows Authentication"
+  }

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runs the shared unit test suite against the Umbraco 17 variant of the package.
+    Owns no sources of its own - see ..\Umbraco.Community.Security.WindowsAuthentication.Tests.
+  -->
+
+  <Import Project="..\Umbraco.Community.Security.WindowsAuthentication.Tests\WindowsAuthentication.Tests.Shared.props" />
+
+  <PropertyGroup>
+    <AssemblyName>Umbraco.Community.Security.WindowsAuthentication.Tests.v17</AssemblyName>
+    <RootNamespace>Umbraco.Community.Security.WindowsAuthentication.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Umbraco.Community.Security.WindowsAuthentication.v17\Umbraco.Community.Security.WindowsAuthentication.v17.csproj" />
+  </ItemGroup>
+
+</Project>

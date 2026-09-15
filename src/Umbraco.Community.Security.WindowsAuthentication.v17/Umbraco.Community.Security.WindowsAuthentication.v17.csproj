@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!--
+    Umbraco 17 variant of the package.
+
+    This project owns NO sources of its own: it compiles the shared files via
+    ..\Umbraco.Community.Security.WindowsAuthentication\WindowsAuthentication.Shared.props, and
+    produces the same assembly name and PackageId as the Umbraco 18 project. The only difference
+    is the Umbraco package range -> [17.5,18).
+
+    The floor is 17.5.0 because Umbraco 17.4.0-17.4.2 start the backoffice router without waiting
+    for app entry points, so the client script could miss the first authenticated requests.
+
+    Add new source files to the Umbraco.Community.Security.WindowsAuthentication shared source
+    folder; they are picked up here automatically.
+
+    This produces the 17.x releases of the package. See docs/BUILDING.md.
+  -->
+
+  <Import Project="..\Umbraco.Community.Security.WindowsAuthentication\WindowsAuthentication.Shared.props" />
+  <Import Project="..\Umbraco.Community.Security.WindowsAuthentication\SharedBackofficeAssets.targets" />
+
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms.Web.Common" Version="[17.5.0, 18.0.0)" />
+  </ItemGroup>
+
+</Project>

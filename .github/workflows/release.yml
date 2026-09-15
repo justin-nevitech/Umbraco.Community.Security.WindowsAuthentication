@@ -1,0 +1,61 @@
+name: Release Package
+
+# Starts when a correctly formatted version tag is pushed.
+# Packaging is version-aligned: the package major tracks the Umbraco major, so the
+# project to pack is selected from the tag's leading major number:
+#   tag 17.1.0      -> Umbraco.Community.Security.WindowsAuthentication.v17  (Umbraco [17.5,18))
+#   tag 18.0.0      -> Umbraco.Community.Security.WindowsAuthentication.v18  (Umbraco [18,19))
+# Both variants build the same sources and publish under one PackageId.
+# Both stable (1.2.3) and prerelease (1.2.3-rc1) tags are supported.
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Select package project from tag major
+        id: project
+        run: |
+          major="${GITHUB_REF_NAME%%.*}"
+          case "$major" in
+            17|18) ;;
+            *) echo "::error::Tag major '$major' has no matching package project (expected 17 or 18)." && exit 1 ;;
+          esac
+          echo "major=$major" >> "$GITHUB_OUTPUT"
+          echo "path=src/Umbraco.Community.Security.WindowsAuthentication.v$major/Umbraco.Community.Security.WindowsAuthentication.v$major.csproj" >> "$GITHUB_OUTPUT"
+          echo "testsDir=src/Umbraco.Community.Security.WindowsAuthentication.Tests.v$major" >> "$GITHUB_OUTPUT"
+          echo "tests=src/Umbraco.Community.Security.WindowsAuthentication.Tests.v$major/Umbraco.Community.Security.WindowsAuthentication.Tests.v$major.csproj" >> "$GITHUB_OUTPUT"
+
+      # Gate the release on the unit test suite for the major being published, so a broken tag
+      # cannot reach NuGet. The test project references the same package project that is packed below.
+      # The client script tests run in a real browser; CI uses Playwright's Chromium instead of Edge.
+      - name: Build tests
+        run: dotnet build ${{steps.project.outputs.tests}} -c Release
+
+      - name: Install Playwright Chromium
+        run: pwsh ${{steps.project.outputs.testsDir}}/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: Test
+        run: dotnet test ${{steps.project.outputs.tests}} -c Release --no-build
+        env:
+          BROWSER_CHANNEL: chromium
+
+      - name: Build & Pack
+        run: dotnet pack ${{steps.project.outputs.path}} -c Release /p:Version=${{github.ref_name}} -o ${{github.workspace}}/artifacts
+
+      - name: Push to NuGet
+        run: dotnet nuget push "${{github.workspace}}/artifacts/*.nupkg" -k ${{secrets.NUGET_API_KEY}} -s https://api.nuget.org/v3/index.json

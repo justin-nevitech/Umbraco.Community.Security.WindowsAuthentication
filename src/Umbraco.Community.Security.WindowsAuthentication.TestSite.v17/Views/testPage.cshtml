@@ -1,0 +1,20 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Umbraco.Cms.Core.Security
+@using Umbraco.Extensions
+@inject IMemberManager MemberManager
+@{
+    Layout = null;
+    var member = await MemberManager.GetCurrentMemberAsync();
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>@Model.Name</title>
+</head>
+<body>
+    <h1 id="page-name">@Model.Name</h1>
+    <p id="body-text">@Model.Value("bodyText")</p>
+    <p id="member">@(member?.UserName ?? "anonymous")</p>
+</body>
+</html>

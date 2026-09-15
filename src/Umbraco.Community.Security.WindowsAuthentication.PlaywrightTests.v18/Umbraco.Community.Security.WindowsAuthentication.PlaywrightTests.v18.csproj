@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runs the shared Playwright suite against the Umbraco 18 test site, with UMBRACO_18 defined for
+    the few checks that differ on Umbraco 18 (such as the OpenAPI document URL).
+    Owns no sources of its own - see ..\Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests.
+  -->
+
+  <Import Project="..\Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests\WindowsAuthentication.PlaywrightTests.Shared.props" />
+
+  <PropertyGroup>
+    <AssemblyName>Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests.v18</AssemblyName>
+    <RootNamespace>Umbraco.Community.Security.WindowsAuthentication.PlaywrightTests</RootNamespace>
+    <DefineConstants>$(DefineConstants);UMBRACO_18</DefineConstants>
+    <TestSiteName>Umbraco.Community.Security.WindowsAuthentication.TestSite.v18</TestSiteName>
+    <IisExpressHttpsPort>44392</IisExpressHttpsPort>
+  </PropertyGroup>
+
+</Project>
