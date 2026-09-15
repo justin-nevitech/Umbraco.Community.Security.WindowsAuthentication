@@ -69,3 +69,7 @@ Created and maintained by [Justin Neville](https://www.nevitech.co.uk) at
 ## Documentation
 
 Full documentation and source code available on [GitHub](https://github.com/justin-nevitech/Umbraco.Community.Security.WindowsAuthentication).
+
+---
+
+[Security icons created by Magnific - Flaticon](https://www.flaticon.com/free-icons/security "security icons")

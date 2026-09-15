@@ -67,10 +67,11 @@
           Link="Client\umbraco-package.json" Pack="false" />
   </ItemGroup>
 
-  <!-- Packaged docs. -->
+  <!-- Packaged docs: shown under docs\ in each package project, packed at the package root where PackageReadmeFile and
+       PackageIcon expect them. The icon is from Flaticon; its attribution is in both READMEs. -->
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)..\..\docs\README_nuget.md" Pack="true" PackagePath="\" />
-    <None Include="$(MSBuildThisFileDirectory)..\..\docs\icon.png" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\docs\README_nuget.md" Link="docs\README_nuget.md" Pack="true" PackagePath="\" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\docs\icon.png" Link="docs\icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

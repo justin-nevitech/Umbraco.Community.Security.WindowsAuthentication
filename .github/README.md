@@ -246,3 +246,4 @@ Contributions to this package are most welcome! Please read the [Contributing Gu
 
 - Structured following the [Opinionated Package Starter](https://github.com/LottePitcher/opinionated-package-starter)
 - Tested with [Playwright for .NET](https://playwright.dev/dotnet/) and [NUnit](https://nunit.org/)
+- [Security icons created by Magnific - Flaticon](https://www.flaticon.com/free-icons/security "security icons")
