@@ -40,6 +40,7 @@ Then, in IIS, disable anonymous authentication and enable Windows Authentication
 - The backoffice works behind IIS with anonymous authentication disabled and Windows Authentication enabled
 - Covers core Management API calls, package API clients, uploads and SignalR
 - Umbraco's own re-login appears when a backoffice session ends, instead of a Windows credentials prompt
+- A failed backoffice sign-in shows Umbraco's "couldn't log you in" message, instead of a Windows credentials prompt
 - Only backoffice requests are affected: front-end, member, Delivery API and custom authentication are untouched
 - Harmless on a site without Windows Authentication
 - Tested end to end on Umbraco 17 and 18, under IIS Express with Windows Authentication and under Kestrel
@@ -53,7 +54,12 @@ There is nothing to configure in Umbraco. In IIS:
 %windir%\system32\inetsrv\appcmd.exe set config "My Site" -section:system.webServer/security/authentication/windowsAuthentication /enabled:true /commit:apphost
 ```
 
-Browsers must trust the site for integrated authentication (Local Intranet zone or the `AuthServerAllowlist` policy), and any reverse proxy must forward the `X-Umb-Authorization` request header and `X-Umb-Authorization-Status` response header. Set the `Umbraco.Community.Security.WindowsAuthentication` log level to `Debug` to log each decision.
+Browsers must trust the site for Windows sign-in, or they prompt for credentials:
+
+- **Edge and Chrome:** the Local Intranet zone or the `AuthServerAllowlist` policy.
+- **Firefox:** the `Authentication` enterprise policy (`SPNEGO` and `NTLM` lists), or the `network.negotiate-auth.trusted-uris` and `network.automatic-ntlm-auth.trusted-uris` preferences. Without it, Firefox keeps prompting, because Windows sign-in happens per connection.
+
+Any reverse proxy must forward the `X-Umb-Authorization` request header and `X-Umb-Authorization-Status` response header. Set the `Umbraco.Community.Security.WindowsAuthentication` log level to `Debug` to log each decision.
 
 ## Author
 

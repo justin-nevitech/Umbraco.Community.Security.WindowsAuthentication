@@ -147,15 +147,15 @@ Between them the suites cover both ends of each supported range: the unit test p
 the package projects, so they compile and run against each major's floor (17.5.0 and 18.0.0), while
 the Playwright tests run the package inside the latest release of each major (17.6.2 and 18.1.1).
 
-**Unit tests** cover the server rules, the middleware and composer, a real ASP.NET Core stack with
-other authentication schemes run with and without the middleware, and the built client script
+**Unit tests** cover the server rules (including the failed sign-in rule), the middleware and composer, a real ASP.NET Core
+stack with other authentication schemes run with and without the middleware, and the built client script
 loaded into a real browser. The client script run fails if any block of the script never executed.
 
 **Playwright tests** start the built test site themselves, on a fresh SQLite database, under two
 hosting models: Kestrel without Windows Authentication, and IIS Express with anonymous
 authentication **off** and Windows Authentication **on**. They sign in to the real backoffice and
 check the transport, every parameterless Management API GET, create/publish/delete workflows, the
-UI, session loss, sign-out, a negative control with the client script blocked, and front-end,
+UI, session loss, a failed sign-in, sign-out, a negative control with the client script blocked, and front-end,
 member and custom authentication.
 
 ```bash
@@ -200,7 +200,10 @@ dotnet run --project src/Umbraco.Community.Security.WindowsAuthentication.TestSi
 ```
 
 Both sites install unattended into SQLite with the backoffice login `admin@example.com` /
-`WindowsAuth-Test-1234`. IIS signs you in with your Windows account first; the Umbraco login comes
-after. The test-only pieces (seeded content, a member and public access, custom JWT, API key and
+`WindowsAuth-Test-1234`. Five failed sign-ins lock that account for 5 minutes
+(`Umbraco:CMS:Security:UserDefaultLockoutTimeInMinutes`; Umbraco's default is 30 days). IIS signs you in with your Windows account
+first; the Umbraco login comes after. Edge does the Windows sign-in to `localhost` automatically. Firefox only does so once
+`localhost` is in its `network.negotiate-auth.trusted-uris` and `network.automatic-ntlm-auth.trusted-uris`
+preferences, and otherwise prompts repeatedly (see [CONTRIBUTING.md](../.github/CONTRIBUTING.md)). The test-only pieces (seeded content, a member and public access, custom JWT, API key and
 Basic schemes, and a diagnostics dashboard under **Settings → Windows Authentication**) are switched
 on by `appsettings.Development.json`.

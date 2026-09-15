@@ -69,6 +69,41 @@ public class WindowsAuthenticationMiddlewareTests
         Assert.That(task, Is.SameAs(tcs.Task));
     }
 
+    [TestCase("NTLM", 1, 400)]
+    [TestCase(null, 0, 401)]
+    public async Task Hides_a_failed_sign_in_only_behind_windows_authentication_and_logs_it(string? authType, int expectedLogEntries, int expectedStatus)
+    {
+        HttpContext context = WindowsAuthenticationHeadersTests.CreateContext();
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Path = WindowsAuthenticationDefaults.BackOfficeLoginPath;
+        if (authType is not null)
+        {
+            WindowsAuthenticationSignInTests.SetAuthType(context, authType);
+        }
+
+        var logger = new ListLogger();
+        var calls = 0;
+        var middleware = new WindowsAuthenticationMiddleware(
+            _ =>
+            {
+                calls++;
+                return Task.CompletedTask;
+            },
+            logger);
+
+        await middleware.InvokeAsync(context);
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await ((WindowsAuthenticationHeadersTests.StartingResponseFeature)context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseFeature>()!).StartAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(calls, Is.EqualTo(1));
+            Assert.That(context.Response.StatusCode, Is.EqualTo(expectedStatus));
+            Assert.That(logger.Entries, Has.Count.EqualTo(expectedLogEntries));
+            Assert.That(logger.Entries.All(e => e.Level == LogLevel.Debug), Is.True);
+        }
+    }
+
     private sealed class ListLogger : ILogger<WindowsAuthenticationMiddleware>
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];

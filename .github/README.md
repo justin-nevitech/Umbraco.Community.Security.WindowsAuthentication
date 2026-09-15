@@ -26,6 +26,7 @@ There is no version-specific code in the package. Each major is compiled against
 - The backoffice works behind IIS with anonymous authentication disabled and Windows Authentication enabled
 - Covers every backoffice request that carries a bearer token: core Management API calls, package API clients, uploads over `XMLHttpRequest`, and SignalR
 - When a backoffice session ends, Umbraco's own re-login appears, instead of a browser prompt for Windows credentials
+- A failed backoffice sign-in shows Umbraco's "couldn't log you in" message, instead of a browser prompt for Windows credentials
 - Only backoffice requests are affected: front-end pages, members, public access, the Delivery API and custom JWT, API key or Basic authentication are untouched
 - Harmless on a site without Windows Authentication, such as Kestrel in local development
 - Nothing to configure in Umbraco: install the package, then configure IIS
@@ -49,7 +50,7 @@ The `"17.*"` / `"18.*"` floating version keeps you on the line built for your Um
 
 1. Install the package and deploy the site
 2. In IIS, disable anonymous authentication and enable Windows Authentication for the site (see [Configuration](#configuration))
-3. Make sure browsers sign in to the site automatically, via the Local Intranet zone or the `AuthServerAllowlist` policy
+3. Make sure browsers sign in to the site automatically (see **Browsers** under [Configuration](#configuration)). Firefox needs its own setting
 4. Browse to `/umbraco`: IIS signs you in with your Windows account, then the normal Umbraco login appears
 
 The package does not sign people in to the backoffice with their Windows account. It keeps the backoffice working behind Windows Authentication; backoffice users still sign in with their Umbraco account or any external login provider you have configured.
@@ -82,13 +83,31 @@ or unlock them and set them in the site's `web.config`:
 </configuration>
 ```
 
-**Browsers.** Browsers only send Windows credentials automatically to trusted hosts: add the site to the Local Intranet zone, or set the `AuthServerAllowlist` policy for Edge and Chrome. Otherwise users get a credentials prompt whether or not the package is installed.
+**Browsers.** Browsers only sign in with the user's Windows account automatically on sites they trust. On any other site they show a credentials prompt, whether or not the package is installed.
+
+- **Edge and Chrome:** add the site to the Local Intranet zone, or set the `AuthServerAllowlist` policy.
+- **Firefox:** ignores the Local Intranet zone. Set the `Authentication` enterprise policy, in `policies.json` or Group Policy:
+
+  ```json
+  {
+    "policies": {
+      "Authentication": {
+        "SPNEGO": ["intranet.example.com"],
+        "NTLM": ["intranet.example.com"]
+      }
+    }
+  }
+  ```
+
+  For a single-label host name such as `https://intranet`, also add `"AllowNonFQDN": { "SPNEGO": true, "NTLM": true }`. On one machine, you can instead set `network.negotiate-auth.trusted-uris` and `network.automatic-ntlm-auth.trusted-uris` in `about:config` to the host name, for example `localhost` for local development, then restart Firefox.
+
+  Without this, Firefox doesn't just prompt once. Windows sign-in happens per connection, and the backoffice keeps opening new connections, including a SignalR connection on every page load, so Firefox keeps asking. Typed credentials may also be rejected for accounts that don't sign in to Windows with a password, such as Microsoft Entra ID accounts that use Windows Hello.
 
 **Reverse proxies and load balancers.** Anything between the browser and IIS must forward the `X-Umb-Authorization` request header and the `X-Umb-Authorization-Status` response header.
 
 **Backoffice on another origin.** If `server-url` points the backoffice at a different origin, that server's CORS policy must allow the `X-Umb-Authorization` request header and expose `X-Umb-Authorization-Status`.
 
-**Logging.** Set the `Umbraco.Community.Security.WindowsAuthentication` log level to `Debug` to log the decision for every request that carries the backoffice header:
+**Logging.** Set the `Umbraco.Community.Security.WindowsAuthentication` log level to `Debug` to log the decision for every request that carries the backoffice header, and for every sign-in whose failure would be hidden from IIS:
 
 ```json
 {
@@ -109,7 +128,7 @@ There are two small parts. Neither needs Umbraco core or other packages to coope
 | Side | What |
 | --- | --- |
 | Browser | An `appEntryPoint` in a package with `allowPublicAccess: true` patches `window.fetch` and `XMLHttpRequest` as soon as the module loads. For requests to the backoffice origin (the page origin, or the origin in `umb-app`'s `server-url`) it moves `Authorization: Bearer <token>` into `X-Umb-Authorization`, and turns a `403` carrying `X-Umb-Authorization-Status: 401` back into the original `401`. |
-| Server | A composer adds an Umbraco `PrePipeline` filter. Its middleware moves the value back into `Authorization` before routing and authentication, so OpenIddict and every `[Authorize]` controller see a normal request. For those requests it sends a `401` response as `403` with `X-Umb-Authorization-Status: 401`, because IIS adds `WWW-Authenticate: Negotiate, NTLM` to **every** 401 the application returns, and the browser would answer that challenge with a Windows credentials prompt instead of letting Umbraco show its re-login. |
+| Server | A composer adds an Umbraco `PrePipeline` filter. Its middleware moves the value back into `Authorization` before routing and authentication, so OpenIddict and every `[Authorize]` controller see a normal request. For those requests it sends a `401` response as `403` with `X-Umb-Authorization-Status: 401`, because IIS adds `WWW-Authenticate: Negotiate, NTLM` to **every** 401 the application returns, and the browser would answer that challenge with a Windows credentials prompt instead of letting Umbraco show its re-login. A failed sign-in on Umbraco's sign-in page gets a `401` too, but that page doesn't load the client script, so when IIS has done Windows authentication the middleware sends it as `400` (with the same marker header), which the sign-in page shows as its normal "couldn't log you in" message. |
 
 IIS never sees a bearer header, so its Windows Authentication completes as normal. Backoffice code always gets the real 401, so Umbraco's own re-authentication runs when a session ends.
 
@@ -121,9 +140,11 @@ The middleware sees every request, but it changes a request only when **all** of
 2. **The header holds exactly one value, and it's a Bearer token.** `Basic …`, a bare `Bearer` with no token, or two header values are all left alone.
 3. **`Authorization` is safe to set.** Either the request has no `Authorization` header, or it has a `Negotiate`/`NTLM` one that IIS or HTTP.sys has already used to authenticate the request. A `Bearer`, `Basic` or custom-scheme header is never replaced, and nor is a `Negotiate` header that the ASP.NET Core Negotiate handler still has to read.
 
-A 401 to any request the middleware didn't change, such as a front-end page, a member API or the Delivery API, stays a 401.
+The one other response the middleware changes is Umbraco's own sign-in. When IIS has already authenticated a `POST` to `/umbraco/management/api/v1/security/back-office/login` with Windows authentication, a `401` response to it is sent as `400` with `X-Umb-Authorization-Status: 401`. The request itself isn't changed, and without Windows authentication (Kestrel, for example) the response is left alone.
 
-In the browser, the client script loads only in the backoffice app (including `/umbraco/preview`), never on front-end pages. It rewrites only backoffice-origin requests with a `Bearer <token>` header; every other `fetch` receives the exact arguments it was called with, and a real 403 is never changed.
+A 401 to any other request, such as a front-end page, a member API or the Delivery API, stays a 401.
+
+In the browser, the client script loads only in the backoffice app (including `/umbraco/preview`), never on front-end pages or the sign-in page. It rewrites only backoffice-origin requests with a `Bearer <token>` header; every other `fetch` receives the exact arguments it was called with, and a real 403 is never changed.
 
 ### Does all backoffice communication go through the package?
 
@@ -137,7 +158,8 @@ Every place the backoffice sets an `Authorization` header goes through the packa
 | Core uploads (`tryXhrRequest`), axios, other XHR code | `XMLHttpRequest.setRequestHeader` | ✅ relayed |
 | SignalR negotiate and long polling | SignalR's fetch client | ✅ relayed |
 | SignalR WebSocket / Server-Sent Events | `access_token` query string plus cookie | ✅ not needed |
-| Login, `authorize`, `token`, `revoke` | Forms, redirects and cookies | ✅ not needed |
+| Sign-in (`login`) | JSON request from the sign-in page, no `Authorization` header | ✅ not needed; a failed sign-in's 401 is sent as 400 behind IIS |
+| `authorize`, `token`, `revoke` | Redirects, forms and cookies | ✅ not needed |
 | Page loads, static assets, media, preview iframe, downloads | Navigation and cookies | ✅ not needed |
 
 ### Why the ordering holds
@@ -155,14 +177,15 @@ The wait in step 3 is missing from **Umbraco 17.4.0–17.4.2**, so on those vers
 
 ### Known limitations
 
+- **Two-factor sign-in.** Only the main sign-in request is covered. If Umbraco answers the two-factor code check (`verify-2fa`) with a 401 behind IIS, the browser still gets a Windows credentials prompt. It isn't sent as 400 because the sign-in page shows a 400 from that request as "invalid code".
 - **Workers and iframes.** A Web Worker, Service Worker or iframe with its own `window` that calls the API with a bearer header uses its own `fetch`, which is not patched. Core does not do this; a package could.
 - **Captured `fetch` references.** Code that stored a reference to `fetch` before the client script ran bypasses it. Only another public `appEntryPoint` can load that early.
 - **Same-origin paths served by another application.** A backoffice call to a path on the same host that is served by a different application (a separate IIS application or a reverse-proxied service) has its bearer header moved, and nothing on that application moves it back.
-- **Not yet tested:** full IIS (tested on IIS Express, in-process), Kerberos (tested with NTLM on localhost), Chrome and Firefox (tested with Edge), reverse proxies and load balancers, and a backoffice on a separate origin.
+- **Not yet tested:** full IIS (tested on IIS Express, in-process), Kerberos (tested with NTLM on localhost), Chrome, reverse proxies and load balancers, and a backoffice on a separate origin. The Playwright tests run in Edge. Firefox has been checked with a single automated run on Umbraco 17 under IIS Express, with the site trusted: sign-in, the main sections and SignalR all worked with no prompts.
 
 ## Performance
 
-- **Server.** One header lookup per request. Requests without `X-Umb-Authorization` pass straight through; backoffice requests get one header copy and a response callback that only acts on a 401.
+- **Server.** One header lookup per request, plus a method and path check for Umbraco's sign-in endpoint. Requests without `X-Umb-Authorization` pass straight through; backoffice requests and sign-ins get a response callback that only acts on a 401.
 - **Browser.** The client script is 3.5 kB (1.5 kB gzipped), loaded once with the backoffice. Each backoffice request gets one header rename and no extra requests.
 
 ## Architecture
@@ -176,9 +199,10 @@ Browser (Backoffice)                    IIS                          Umbraco (AS
 |  - Authorization: Bearer   |          |  - never sees the    |     |      -> Authorization             |
 |      -> X-Umb-Authorization|          |    bearer header     |     |  - 401 -> 403 + X-Umb-            |
 |                            | response |  - adds a Windows    |     |      Authorization-Status: 401    |
-|  - 403 + status marker     | <------- |    challenge to 401s | <-- |                                   |
-|      -> 401                |          |    only              |     | OpenIddict and [Authorize] see a  |
-+----------------------------+          +----------------------+     | normal backoffice request         |
+|  - 403 + status marker     | <------- |    challenge to 401s | <-- |  - failed sign-in: 401 -> 400     |
+|      -> 401                |          |    only              |     |                                   |
++----------------------------+          +----------------------+     | OpenIddict and [Authorize] see a  |
+                                                                     | normal backoffice request         |
                                                                      +-----------------------------------+
 ```
 
@@ -188,6 +212,10 @@ Browser (Backoffice)                    IIS                          Umbraco (AS
 - The `17.x` package requires Umbraco 17.5.0 or later. Upgrade the site's Umbraco packages first
 - Check you pinned the package major that matches your Umbraco major (see [Installation](#installation))
 
+**Signing in to Umbraco keeps asking for Windows credentials, or the right password is refused**
+- Umbraco answers a failed sign-in with 401, and IIS adds its Windows challenge to it. The package sends that 401 as 400 so the sign-in page shows "couldn't log you in" instead; if you still get a Windows prompt, check the package is installed and the site has been restarted
+- Umbraco also answers with 401 when the user is locked out, so the right password is refused too. After `MaxFailedAccessAttemptsBeforeLockout` failed attempts (5 by default) a backoffice user stays locked out for `UserDefaultLockoutTimeInMinutes` (30 days by default) unless another administrator unlocks them in **Users**
+
 **The backoffice doesn't load, or its requests fail with 401**
 - Check the browser console for `[WindowsAuthentication] installed after … ms`. If it's missing, the client script didn't load: check that `/App_Plugins/WindowsAuthentication/` is served and that the package appears in the `manifest/public` response
 - A `[WindowsAuthentication] … started before the client script was installed` warning means a backoffice request raced the script. The package relies on the boot order above, so check the site runs a [supported Umbraco version](#compatibility)
@@ -195,7 +223,8 @@ Browser (Backoffice)                    IIS                          Umbraco (AS
 - Check that any reverse proxy, WAF or load balancer forwards the `X-Umb-Authorization` header
 
 **The browser asks for Windows credentials**
-- Add the site to the Local Intranet zone or the `AuthServerAllowlist` policy
+- The browser doesn't trust the site for Windows sign-in. See **Browsers** under [Configuration](#configuration)
+- In Firefox this shows up as repeated prompts, one for each new connection the backoffice opens. Trusting the site stops them all; typing credentials only gets past the current prompt
 - A front-end page that returns 401 still gets IIS's Windows challenge. That's IIS behaviour for any site with Windows Authentication; the package deliberately doesn't change front-end responses
 
 **A package's backoffice API calls fail**

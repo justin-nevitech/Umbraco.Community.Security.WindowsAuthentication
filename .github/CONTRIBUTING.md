@@ -20,10 +20,12 @@ There are test sites in the solution to make working with this repository easier
 3. Set `Umbraco.Community.Security.WindowsAuthentication.TestSite.v17` (or `.v18`) as the startup project
 4. Pick the `IIS Express (Windows Auth)` launch profile to run behind Windows Authentication with anonymous authentication off, or `Kestrel (no Windows Auth)` for an ordinary site
 5. Run the project — it will perform an unattended Umbraco install on first run
-6. Log in with the credentials from `appsettings.Development.json`
+6. Log in with the credentials from `appsettings.Development.json`. Five failed sign-ins lock the account for 5 minutes on the test sites (Umbraco's default is 30 days)
 7. Open **Settings → Windows Authentication** for the diagnostics dashboard
 
 Without Visual Studio, run `.\scripts\Start-IISExpress.ps1` (add `-UmbracoVersion 18` for the Umbraco 18 site).
+
+> **Testing in Firefox:** Edge signs in to `localhost` with your Windows account automatically; Firefox doesn't until you trust it. In `about:config`, set `network.negotiate-auth.trusted-uris` and `network.automatic-ntlm-auth.trusted-uris` to `localhost`, then restart Firefox. Without this, Firefox prompts for Windows credentials again for each new connection. A Microsoft Entra ID account that signs in to Windows with Windows Hello may not be accepted at the prompt at all.
 
 > The package supports both Umbraco 17 and 18 from one set of sources, via two wrapper package projects that compile the same files (`Umbraco.Community.Security.WindowsAuthentication.v17` and `Umbraco.Community.Security.WindowsAuthentication.v18`). The sources themselves live in `Umbraco.Community.Security.WindowsAuthentication`, which is a shared source folder rather than a project — add new files there and both variants pick them up automatically. Both test sites are in the solution and can run at the same time (v17 on `https://localhost:44317`, v18 on `https://localhost:44318` under IIS Express). See [docs/BUILDING.md](../docs/BUILDING.md) for the dual-major build details.
 

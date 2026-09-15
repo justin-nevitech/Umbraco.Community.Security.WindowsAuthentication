@@ -19,5 +19,10 @@ public static class WindowsAuthenticationDefaults
     /// </summary>
     public const string AppliedItemKey = "Umbraco.Community.Security.WindowsAuthentication.Applied";
 
+    /// <summary>
+    /// The Management API endpoint the Umbraco sign-in page posts credentials to. The sign-in page requests this exact path.
+    /// </summary>
+    public const string BackOfficeLoginPath = "/umbraco/management/api/v1/security/back-office/login";
+
     public const string PipelineFilterName = "Umbraco.Community.Security.WindowsAuthentication";
 }

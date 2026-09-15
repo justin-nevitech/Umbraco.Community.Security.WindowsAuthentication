@@ -1,16 +1,19 @@
 using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -18,12 +21,20 @@ namespace Umbraco.Community.Security.WindowsAuthentication.Tests.Server;
 
 /// <summary>
 /// Runs a real ASP.NET Core authentication stack with and without the middleware in front of it. Every request the
-/// backoffice client script did not produce must get exactly the same response from both.
+/// backoffice client script did not produce must get exactly the same response from both, apart from a failed backoffice
+/// sign-in that the host authenticated with Windows authentication.
 /// </summary>
 [TestFixture]
 public class AuthenticationSchemeIsolationTests
 {
     private const string BackOfficeHeader = WindowsAuthenticationDefaults.HeaderName;
+    private const string LoginPath = WindowsAuthenticationDefaults.BackOfficeLoginPath;
+
+    /// <summary>Makes the test server behave as if IIS had authenticated the request with Windows authentication.</summary>
+    private const string HostAuthenticationHeader = "X-Test-Host-Authentication";
+
+    private const string WrongPassword = """{"username":"admin@example.com","password":"wrong"}""";
+    private const string RightPassword = """{"username":"admin@example.com","password":"right"}""";
 
     private static readonly SymmetricSecurityKey SigningKey = new(Encoding.UTF8.GetBytes(new string('k', 64)));
     private static readonly string ValidJwt = CreateJwt("front-end-user");
@@ -77,6 +88,14 @@ public class AuthenticationSchemeIsolationTests
             new("Backoffice header next to Basic credentials the application reads", "GET", "/auth/basic", 200, [("Authorization", $"Basic {ValidBasic}"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
             new("Backoffice header next to a Negotiate token the application reads", "GET", "/auth/negotiate", 200, [("Authorization", "Negotiate valid"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
             new("Backoffice header next to an API key", "GET", "/auth/api-key", 200, [("X-Api-Key", "secret"), (BackOfficeHeader, "Basic abc")]),
+
+            // Behind host Windows authentication, only a failed backoffice sign-in may change; front-end 401s must not.
+            new("JWT scheme without a token, behind host Windows authentication", "GET", "/auth/jwt", 401, [(HostAuthenticationHeader, "NTLM")]),
+            new("Cookie scheme, not signed in, behind host Windows authentication", "GET", "/auth/cookie", 401, [(HostAuthenticationHeader, "Negotiate")]),
+            new("POST with a JSON body behind host Windows authentication", "POST", "/echo", 200, [(HostAuthenticationHeader, "NTLM")], Body: """{"a":1}"""),
+            new("Failed backoffice sign-in without host Windows authentication", "POST", LoginPath, 401, [], Body: WrongPassword),
+            new("Successful backoffice sign-in behind host Windows authentication", "POST", LoginPath, 200, [(HostAuthenticationHeader, "NTLM")], Body: RightPassword),
+            new("GET on the sign-in path behind host Windows authentication", "GET", LoginPath, 405, [(HostAuthenticationHeader, "NTLM")]),
         ];
 
         return specs.Select(spec => new TestCaseData(spec).SetName($"Same result with and without the middleware: {spec.Name}"));
@@ -141,6 +160,22 @@ public class AuthenticationSchemeIsolationTests
             Assert.That(relayed.Status, Is.EqualTo(403));
             Assert.That(relayed.StatusMarker, Is.EqualTo("401"));
             Assert.That(relayed with { Status = 401, StatusMarker = null }, Is.EqualTo(direct));
+        }
+    }
+
+    [TestCase("NTLM")]
+    [TestCase("Negotiate")]
+    public async Task Failed_backoffice_sign_in_behind_host_windows_authentication_is_sent_as_400_with_the_status_marker(string authType)
+    {
+        Response direct = await SendAsync(_withoutMiddleware, new RequestSpec("direct", "POST", LoginPath, 401, [(HostAuthenticationHeader, authType)], Body: WrongPassword));
+        Response hidden = await SendAsync(_withMiddleware, new RequestSpec("hidden", "POST", LoginPath, 401, [(HostAuthenticationHeader, authType)], Body: WrongPassword));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(direct.Status, Is.EqualTo(401));
+            Assert.That(hidden.Status, Is.EqualTo(400), "Sent as 400 so IIS does not add its Windows challenge; the sign-in page shows the same message");
+            Assert.That(hidden.StatusMarker, Is.EqualTo("401"));
+            Assert.That(hidden with { Status = 401, StatusMarker = null }, Is.EqualTo(direct), "Everything else, including the body, is unchanged");
         }
     }
 
@@ -212,6 +247,17 @@ public class AuthenticationSchemeIsolationTests
                 })
                 .Configure(app =>
                 {
+                    // Stands in for IIS Windows authentication, which runs before the application and reports AUTH_TYPE.
+                    app.Use((context, next) =>
+                    {
+                        if (context.Request.Headers.TryGetValue(HostAuthenticationHeader, out StringValues authType))
+                        {
+                            context.Features.Set<IServerVariablesFeature>(new HostServerVariables(authType.ToString()));
+                        }
+
+                        return next(context);
+                    });
+
                     if (withMiddleware)
                     {
                         app.UseMiddleware<WindowsAuthenticationMiddleware>();
@@ -229,6 +275,18 @@ public class AuthenticationSchemeIsolationTests
 
                         endpoints.MapPost("/cookie/sign-in", (HttpContext context) =>
                             context.SignInAsync("Cookies", Principal("member", "Cookies")));
+
+                        // Stands in for Umbraco's backoffice sign-in, which answers wrong credentials with a 401 problem details body.
+                        endpoints.MapPost(LoginPath, async context =>
+                        {
+                            using JsonDocument credentials = await JsonDocument.ParseAsync(context.Request.Body);
+                            bool valid = credentials.RootElement.GetProperty("password").GetString() == "right";
+                            context.Response.StatusCode = valid ? StatusCodes.Status200OK : StatusCodes.Status401Unauthorized;
+                            context.Response.ContentType = valid ? "application/json" : "application/problem+json";
+                            await context.Response.WriteAsync(valid
+                                ? """{"signedIn":true}"""
+                                : """{"type":"Error","title":"Invalid credentials","status":401,"detail":"The provided credentials are invalid. User has not been signed in."}""");
+                        });
 
                         endpoints.MapMethods("/echo", ["GET", "POST"], async (HttpContext context) =>
                         {
@@ -259,6 +317,15 @@ public class AuthenticationSchemeIsolationTests
 
     private static ClaimsPrincipal Principal(string name, string authenticationType)
         => new(new ClaimsIdentity([new Claim(ClaimTypes.Name, name)], authenticationType));
+
+    private sealed class HostServerVariables(string authType) : IServerVariablesFeature
+    {
+        public string? this[string variableName]
+        {
+            get => string.Equals(variableName, "AUTH_TYPE", StringComparison.OrdinalIgnoreCase) ? authType : null;
+            set => throw new NotSupportedException();
+        }
+    }
 
     private sealed class ApiKeyHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
         : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
