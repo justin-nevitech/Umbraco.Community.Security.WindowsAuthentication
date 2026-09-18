@@ -59,6 +59,31 @@ public class WindowsAuthenticationMiddlewareTests
     }
 
     [Test]
+    public async Task Logs_and_leaves_alone_a_backoffice_header_outside_the_backoffice_path()
+    {
+        HttpContext context = WindowsAuthenticationHeadersTests.CreateContext((WindowsAuthenticationDefaults.HeaderName, "Bearer abc"));
+        context.Request.Path = "/api/front-end";
+        var logger = new ListLogger();
+        string? seenAuthorization = "not called";
+        var middleware = new WindowsAuthenticationMiddleware(
+            ctx =>
+            {
+                seenAuthorization = ctx.Request.Headers.Authorization;
+                return Task.CompletedTask;
+            },
+            logger);
+
+        await middleware.InvokeAsync(context);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(seenAuthorization, Is.Null.Or.Empty, "The header is not relayed outside /umbraco");
+            Assert.That(logger.Entries, Has.Count.EqualTo(1));
+            Assert.That(logger.Entries[0].Message, Does.Contain(nameof(WindowsAuthenticationHeadersResult.OutsideBackOfficePath)));
+        }
+    }
+
+    [Test]
     public void Returns_the_task_from_next()
     {
         var tcs = new TaskCompletionSource();

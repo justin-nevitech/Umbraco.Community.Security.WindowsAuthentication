@@ -15,8 +15,8 @@ function r() {
 }
 function i(e) {
 	try {
-		let t = new URL(e, document.baseURI).origin;
-		return t === location.origin || t === r();
+		let t = new URL(e, document.baseURI);
+		return (t.origin === location.origin || t.origin === r()) && t.pathname.toLowerCase().startsWith("/umbraco/");
 	} catch {
 		return !1;
 	}
@@ -103,4 +103,4 @@ if (!window.__umbWindowsAuthentication) {
 }
 //#endregion
 
-//# sourceMappingURL=windows-authentication-JVeUi8wP.js.map
+//# sourceMappingURL=windows-authentication-BstNM8FV.js.map

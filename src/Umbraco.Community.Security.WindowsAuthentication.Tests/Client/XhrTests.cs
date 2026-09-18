@@ -23,6 +23,8 @@ public class XhrTests : ClientScriptBrowserTest
     }
 
     [TestCase("https://other.test/a", "Bearer abc", OtherOrigin, "/a", TestName = "Bearer to another origin")]
+    [TestCase("/api/a", "Bearer abc", Origin, "/api/a", TestName = "Bearer to a same-origin path outside /umbraco")]
+    [TestCase("/umbracox/a", "Bearer abc", Origin, "/umbracox/a", TestName = "Bearer to a path that only starts with umbraco")]
     [TestCase("/umbraco/a", "Basic dXNlcjpwYXNz", Origin, "/umbraco/a", TestName = "Basic credentials")]
     [TestCase("/umbraco/a", "Bearer", Origin, "/umbraco/a", TestName = "Bearer without a token")]
     public async Task Passes_other_authorization_headers_through_untouched(string url, string value, string origin, string path)
@@ -63,6 +65,39 @@ public class XhrTests : ClientScriptBrowserTest
         await SendXhrAsync("xhr.open('GET', 'https://api.test/umbraco/a'); xhr.setRequestHeader('Authorization', 'Bearer abc');");
 
         Assert.That(SingleRequest(ServerOrigin, "/umbraco/a").Header("x-umb-authorization"), Is.EqualTo("Bearer abc"));
+    }
+
+    [Test]
+    public async Task Matches_the_backoffice_path_case_insensitively()
+    {
+        await OpenBackofficeAsync();
+
+        await SendXhrAsync("xhr.open('GET', '/UMBRACO/Management/API/a'); xhr.setRequestHeader('Authorization', 'Bearer abc');");
+
+        RecordedRequest request = SingleRequest("/UMBRACO/Management/API/a");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(request.Header("x-umb-authorization"), Is.EqualTo("Bearer abc"));
+            Assert.That(request.Header("authorization"), Is.Null);
+            Assert.That(await RewriteCountsAsync(), Is.EqualTo((0, 1)));
+        }
+    }
+
+    [TestCase("/api/a", TestName = "Server url path outside /umbraco")]
+    [TestCase("/umbracox/a", TestName = "Server url path that only starts with umbraco")]
+    public async Task Leaves_a_server_url_request_outside_umbraco_alone(string path)
+    {
+        await OpenBackofficeAsync(serverUrl: ServerOrigin);
+
+        await SendXhrAsync($"xhr.open('GET', '{ServerOrigin}{path}'); xhr.setRequestHeader('Authorization', 'Bearer abc');");
+
+        RecordedRequest request = SingleRequest(ServerOrigin, path);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(request.Header("authorization"), Is.EqualTo("Bearer abc"));
+            Assert.That(request.Header("x-umb-authorization"), Is.Null);
+            Assert.That(await RewriteCountsAsync(), Is.EqualTo((0, 0)));
+        }
     }
 
     [Test]

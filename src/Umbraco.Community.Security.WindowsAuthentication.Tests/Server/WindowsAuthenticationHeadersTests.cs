@@ -265,6 +265,39 @@ public class WindowsAuthenticationHeadersTests
         AssertRestored(context, result);
     }
 
+    [TestCase("/")]
+    [TestCase("/api/test-auth/jwt")]
+    [TestCase("/media/image.jpg")]
+    [TestCase("/umbracox/api")]
+    [TestCase("/umbraco-extra/api")]
+    [TestCase("/app/umbraco/management/api")]
+    public void Leaves_a_request_outside_the_backoffice_path_untouched(string path)
+    {
+        // Only Umbraco's own endpoints under /umbraco are relayed, so a same-origin path served by anything else keeps its headers.
+        HttpContext context = CreateContext((BackOfficeHeader, "Bearer abc"));
+        context.Request.Path = path;
+        List<string> before = Snapshot(context);
+
+        WindowsAuthenticationHeadersResult result = WindowsAuthenticationHeaders.Apply(context);
+
+        AssertUntouched(context, before, result, WindowsAuthenticationHeadersResult.OutsideBackOfficePath);
+    }
+
+    [TestCase("/umbraco")]
+    [TestCase("/umbraco/serverEventHub")]
+    [TestCase("/umbraco/preview")]
+    [TestCase("/umbraco/ailoganalyser/api/v1.0/analyse")]
+    [TestCase("/UMBRACO/Management/API/v1/user/current")]
+    public void Restores_on_any_path_under_the_backoffice_path(string path)
+    {
+        HttpContext context = CreateContext((BackOfficeHeader, "Bearer abc"));
+        context.Request.Path = path;
+
+        WindowsAuthenticationHeadersResult result = WindowsAuthenticationHeaders.Apply(context);
+
+        AssertRestored(context, result);
+    }
+
     private static void AssertRestored(HttpContext context, WindowsAuthenticationHeadersResult result)
     {
         using (Assert.EnterMultipleScope())
@@ -292,6 +325,9 @@ public class WindowsAuthenticationHeadersTests
     {
         var context = new DefaultHttpContext();
         context.Features.Set<IHttpResponseFeature>(new StartingResponseFeature());
+
+        // Only requests under /umbraco are relayed; tests that need another path set it themselves.
+        context.Request.Path = "/umbraco/management/api/v1/test";
 
         foreach ((string name, string value) in headers)
         {

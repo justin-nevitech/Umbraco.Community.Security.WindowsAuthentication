@@ -20,6 +20,12 @@ public enum WindowsAuthenticationHeadersResult
 
     /// <summary>The request carries an <c>Authorization</c> header the application may still need, so the request was not changed.</summary>
     AuthorizationHeaderInUse,
+
+    /// <summary>
+    /// The request carries the X-Umb-Authorization header but is not for a path under <see cref="WindowsAuthenticationDefaults.BackOfficePath"/>,
+    /// so the request was not changed.
+    /// </summary>
+    OutsideBackOfficePath,
 }
 
 /// <summary>
@@ -30,7 +36,8 @@ public enum WindowsAuthenticationHeadersResult
 /// Only the backoffice client script sends the X-Umb-Authorization header, so every other request (front-end pages, members, the Delivery API,
 /// custom authentication schemes) is left untouched. A request is only changed when:
 /// <list type="bullet">
-/// <item>it carries exactly one X-Umb-Authorization header holding a Bearer value, and</item>
+/// <item>it carries exactly one X-Umb-Authorization header holding a Bearer value,</item>
+/// <item>it is for a path under <see cref="WindowsAuthenticationDefaults.BackOfficePath"/>, where Umbraco's own backoffice endpoints live, and</item>
 /// <item>it has no <c>Authorization</c> header, or has a Negotiate/NTLM one the host has already used to authenticate the request
 /// (IIS and HTTP.sys Windows authentication run before the application).</item>
 /// </list>
@@ -55,6 +62,11 @@ public static class WindowsAuthenticationHeaders
         if (headers.TryGetValue(WindowsAuthenticationDefaults.HeaderName, out StringValues headerValue) is false)
         {
             return WindowsAuthenticationHeadersResult.NoBackOfficeHeader;
+        }
+
+        if (context.Request.Path.StartsWithSegments(WindowsAuthenticationDefaults.BackOfficePath, StringComparison.OrdinalIgnoreCase) is false)
+        {
+            return WindowsAuthenticationHeadersResult.OutsideBackOfficePath;
         }
 
         if (headerValue.Count != 1 || IsBearer(headerValue[0]) is false)

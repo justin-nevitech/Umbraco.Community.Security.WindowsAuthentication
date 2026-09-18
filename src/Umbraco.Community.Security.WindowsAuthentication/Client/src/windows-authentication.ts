@@ -3,8 +3,9 @@
  *
  * Under IIS Windows Authentication the browser needs the Authorization header for the Negotiate/NTLM handshake. The
  * backoffice puts its bearer value there instead, so IIS rejects the request and the handshake never happens. This
- * module moves same-origin bearer values into X-Umb-Authorization, and the server-side middleware moves them back
- * before authentication runs.
+ * module moves the bearer value on requests to Umbraco's own paths (under /umbraco on the backoffice origin) into
+ * X-Umb-Authorization, and the server-side middleware moves it back before authentication runs. Every other request,
+ * including same-origin requests outside /umbraco, is passed through untouched.
  *
  * IIS also adds its Windows challenge to every 401, which would make the browser prompt for Windows credentials when a
  * backoffice session ends. The server sends those 401s as 403 with X-Umb-Authorization-Status: 401, and this module
@@ -18,6 +19,10 @@
 const BACKOFFICE_HEADER = 'X-Umb-Authorization';
 const STATUS_HEADER = 'X-Umb-Authorization-Status';
 const MANAGEMENT_API_PATH = '/umbraco/management/api/';
+
+// Umbraco's own endpoints (the Management API, the SignalR hub, preview and package APIs registered with [BackOfficeRoute])
+// all live under this path. Must match WindowsAuthenticationDefaults.BackOfficePath on the server.
+const BACKOFFICE_PATH = '/umbraco/';
 
 // Management API endpoints umb-app calls anonymously before app entry points have loaded. Anything else seen before
 // the client script was installed may have gone out with a bearer token.
@@ -50,11 +55,13 @@ function getServerOrigin(): string | undefined {
 	}
 }
 
-// Only backoffice requests are touched; a bearer token for any other origin is left alone.
-function isBackofficeOrigin(url: string | URL): boolean {
+// Only Umbraco's own endpoints are touched. A bearer token for another origin, or for a same-origin path outside /umbraco
+// (a front-end API, or another application on the same host), is left alone.
+function isBackofficeRequest(url: string | URL): boolean {
 	try {
-		const origin = new URL(url, document.baseURI).origin;
-		return origin === location.origin || origin === getServerOrigin();
+		const target = new URL(url, document.baseURI);
+		const isBackofficeOrigin = target.origin === location.origin || target.origin === getServerOrigin();
+		return isBackofficeOrigin && target.pathname.toLowerCase().startsWith(BACKOFFICE_PATH);
 	} catch {
 		return false;
 	}
@@ -92,7 +99,7 @@ function patchFetch(state: WindowsAuthenticationState) {
 	const originalFetch = window.fetch.bind(window);
 
 	window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-		if (!isBackofficeOrigin(input instanceof Request ? input.url : input)) {
+		if (!isBackofficeRequest(input instanceof Request ? input.url : input)) {
 			return originalFetch(input, init);
 		}
 
@@ -113,7 +120,7 @@ function patchFetch(state: WindowsAuthenticationState) {
 }
 
 function patchXhr(state: WindowsAuthenticationState) {
-	const sameOriginRequests = new WeakSet<XMLHttpRequest>();
+	const backofficeRequests = new WeakSet<XMLHttpRequest>();
 	const rewrittenRequests = new WeakSet<XMLHttpRequest>();
 	const restoredRequests = new WeakSet<XMLHttpRequest>();
 	const proto = XMLHttpRequest.prototype;
@@ -124,10 +131,10 @@ function patchXhr(state: WindowsAuthenticationState) {
 	const statusTextGetter = Object.getOwnPropertyDescriptor(proto, 'statusText')!.get!;
 
 	proto.open = function (this: XMLHttpRequest, method: string, url: string | URL, ...rest: unknown[]) {
-		if (isBackofficeOrigin(url)) {
-			sameOriginRequests.add(this);
+		if (isBackofficeRequest(url)) {
+			backofficeRequests.add(this);
 		} else {
-			sameOriginRequests.delete(this);
+			backofficeRequests.delete(this);
 		}
 
 		// A reopened request is a new request.
@@ -139,7 +146,7 @@ function patchXhr(state: WindowsAuthenticationState) {
 	} as XMLHttpRequest['open'];
 
 	proto.setRequestHeader = function (this: XMLHttpRequest, name: string, value: string) {
-		if (sameOriginRequests.has(this) && name.toLowerCase() === 'authorization' && isBearer(value)) {
+		if (backofficeRequests.has(this) && name.toLowerCase() === 'authorization' && isBearer(value)) {
 			state.rewrites.xhr++;
 			rewrittenRequests.add(this);
 			return originalSetRequestHeader.call(this, BACKOFFICE_HEADER, value);

@@ -66,6 +66,7 @@ public class WindowsAuthenticationComposerTests
         });
 
         var httpContext = new DefaultHttpContext { RequestServices = provider };
+        httpContext.Request.Path = "/umbraco/management/api/v1/user/current";
         httpContext.Request.Headers[WindowsAuthenticationDefaults.HeaderName] = "Bearer abc";
         await app.Build()(httpContext);
 

@@ -37,24 +37,20 @@ public sealed class NetworkLog
             }
 
             RequestedUrls.Enqueue(request.Url);
-            Dictionary<string, string> headers;
+
+            // Headers set by script are already known when the request starts, so record them straight away. Waiting for
+            // AllHeadersAsync first can leave a request unrecorded when a test aborts it and asserts before the call returns.
+            if (Record(request, request.Headers))
+            {
+                return;
+            }
+
             try
             {
-                headers = await request.AllHeadersAsync();
+                Record(request, await request.AllHeadersAsync());
             }
             catch (PlaywrightException)
             {
-                headers = request.Headers;
-            }
-
-            if (headers.TryGetValue("authorization", out string? authorization) && authorization.StartsWith("Bearer", StringComparison.OrdinalIgnoreCase))
-            {
-                BearerRequests.Enqueue($"{request.Method} {request.Url}");
-            }
-
-            if (headers.ContainsKey("x-umb-authorization"))
-            {
-                RelayedRequests.Enqueue($"{request.Method} {request.Url}");
             }
         };
 
@@ -83,6 +79,25 @@ public sealed class NetworkLog
             socket.FrameReceived += (_, _) => entry.FramesReceived++;
             socket.SocketError += (_, error) => entry.Error = error;
         };
+    }
+
+    /// <summary>Queues the request under whichever of the two headers it carries; true when it carried either.</summary>
+    private bool Record(IRequest request, Dictionary<string, string> headers)
+    {
+        bool bearer = headers.TryGetValue("authorization", out string? authorization) && authorization.StartsWith("Bearer", StringComparison.OrdinalIgnoreCase);
+        bool relayed = headers.ContainsKey("x-umb-authorization");
+
+        if (bearer)
+        {
+            BearerRequests.Enqueue($"{request.Method} {request.Url}");
+        }
+
+        if (relayed)
+        {
+            RelayedRequests.Enqueue($"{request.Method} {request.Url}");
+        }
+
+        return bearer || relayed;
     }
 
     /// <summary>
