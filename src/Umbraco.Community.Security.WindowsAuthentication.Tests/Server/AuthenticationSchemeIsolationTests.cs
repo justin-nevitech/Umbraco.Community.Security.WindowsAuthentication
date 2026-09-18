@@ -28,6 +28,7 @@ namespace Umbraco.Community.Security.WindowsAuthentication.Tests.Server;
 public class AuthenticationSchemeIsolationTests
 {
     private const string BackOfficeHeader = WindowsAuthenticationDefaults.HeaderName;
+    private const string BackOfficePrefix = WindowsAuthenticationDefaults.BackOfficePath;
     private const string LoginPath = WindowsAuthenticationDefaults.BackOfficeLoginPath;
 
     /// <summary>Makes the test server behave as if IIS had authenticated the request with Windows authentication.</summary>
@@ -80,14 +81,19 @@ public class AuthenticationSchemeIsolationTests
             new("Negotiate handled by the application, no token", "GET", "/auth/negotiate", 401, []),
 
             // Requests carrying an X-Umb-Authorization header the middleware must ignore, including the 401 responses they get.
-            new("Backoffice header that is not a bearer value", "GET", "/echo", 200, [(BackOfficeHeader, "Basic abc")]),
-            new("Backoffice header with only the scheme name", "GET", "/auth/jwt", 401, [(BackOfficeHeader, "Bearer")]),
-            new("Two backoffice header values", "GET", "/auth/jwt", 401, [(BackOfficeHeader, $"Bearer {ValidJwt}"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
-            new("Backoffice header next to a JWT the application reads", "GET", "/auth/jwt", 200, [("Authorization", $"Bearer {ValidJwt}"), (BackOfficeHeader, "Bearer other")]),
-            new("Backoffice header next to an invalid JWT the application reads", "GET", "/auth/jwt", 401, [("Authorization", "Bearer not-a-jwt"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
-            new("Backoffice header next to Basic credentials the application reads", "GET", "/auth/basic", 200, [("Authorization", $"Basic {ValidBasic}"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
-            new("Backoffice header next to a Negotiate token the application reads", "GET", "/auth/negotiate", 200, [("Authorization", "Negotiate valid"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
-            new("Backoffice header next to an API key", "GET", "/auth/api-key", 200, [("X-Api-Key", "secret"), (BackOfficeHeader, "Basic abc")]),
+            new("Backoffice header that is not a bearer value", "GET", "/umbraco/echo", 200, [(BackOfficeHeader, "Basic abc")]),
+            new("Backoffice header with only the scheme name", "GET", "/umbraco/auth/jwt", 401, [(BackOfficeHeader, "Bearer")]),
+            new("Two backoffice header values", "GET", "/umbraco/auth/jwt", 401, [(BackOfficeHeader, $"Bearer {ValidJwt}"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
+            new("Backoffice header next to a JWT the application reads", "GET", "/umbraco/auth/jwt", 200, [("Authorization", $"Bearer {ValidJwt}"), (BackOfficeHeader, "Bearer other")]),
+            new("Backoffice header next to an invalid JWT the application reads", "GET", "/umbraco/auth/jwt", 401, [("Authorization", "Bearer not-a-jwt"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
+            new("Backoffice header next to Basic credentials the application reads", "GET", "/umbraco/auth/basic", 200, [("Authorization", $"Basic {ValidBasic}"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
+            new("Backoffice header next to a Negotiate token the application reads", "GET", "/umbraco/auth/negotiate", 200, [("Authorization", "Negotiate valid"), (BackOfficeHeader, $"Bearer {ValidJwt}")]),
+            new("Backoffice header next to an API key", "GET", "/umbraco/auth/api-key", 200, [("X-Api-Key", "secret"), (BackOfficeHeader, "Basic abc")]),
+
+            // A valid backoffice header on a path outside /umbraco is never relayed, so the application sees the request exactly as sent.
+            new("Valid backoffice header on a protected path outside /umbraco", "GET", "/auth/jwt", 401, [(BackOfficeHeader, $"Bearer {ValidJwt}")]),
+            new("Valid backoffice header on an anonymous path outside /umbraco", "GET", "/echo", 200, [(BackOfficeHeader, $"Bearer {ValidJwt}")]),
+            new("Valid backoffice header on a path that only starts with umbraco", "GET", "/umbracox/echo", 404, [(BackOfficeHeader, $"Bearer {ValidJwt}")]),
 
             // Behind host Windows authentication, only a failed backoffice sign-in may change; front-end 401s must not.
             new("JWT scheme without a token, behind host Windows authentication", "GET", "/auth/jwt", 401, [(HostAuthenticationHeader, "NTLM")]),
@@ -115,8 +121,8 @@ public class AuthenticationSchemeIsolationTests
         }
     }
 
-    [TestCase("/auth/jwt", 200)]
-    [TestCase("/echo", 200)]
+    [TestCase("/umbraco/auth/jwt", 200)]
+    [TestCase("/umbraco/echo", 200)]
     public async Task Relayed_bearer_reaches_the_application_exactly_as_a_direct_bearer(string path, int expectedStatus)
     {
         Response direct = await SendAsync(_withoutMiddleware, new RequestSpec("direct", "GET", path, expectedStatus, [("Authorization", $"Bearer {ValidJwt}"), ("X-Custom", "1")]));
@@ -132,8 +138,8 @@ public class AuthenticationSchemeIsolationTests
     [Test]
     public async Task Relayed_invalid_bearer_is_rejected_exactly_as_a_direct_invalid_bearer_once_the_client_restores_the_401()
     {
-        Response direct = await SendAsync(_withoutMiddleware, new RequestSpec("direct", "GET", "/auth/jwt", 401, [("Authorization", "Bearer not-a-jwt")]));
-        Response relayed = await SendAsync(_withMiddleware, new RequestSpec("relayed", "GET", "/auth/jwt", 401, [(BackOfficeHeader, "Bearer not-a-jwt")]));
+        Response direct = await SendAsync(_withoutMiddleware, new RequestSpec("direct", "GET", "/umbraco/auth/jwt", 401, [("Authorization", "Bearer not-a-jwt")]));
+        Response relayed = await SendAsync(_withMiddleware, new RequestSpec("relayed", "GET", "/umbraco/auth/jwt", 401, [(BackOfficeHeader, "Bearer not-a-jwt")]));
 
         using (Assert.EnterMultipleScope())
         {
@@ -145,10 +151,10 @@ public class AuthenticationSchemeIsolationTests
         }
     }
 
-    [TestCase("/auth/cookie")]
-    [TestCase("/auth/basic")]
-    [TestCase("/auth/api-key")]
-    [TestCase("/auth/negotiate")]
+    [TestCase("/umbraco/auth/cookie")]
+    [TestCase("/umbraco/auth/basic")]
+    [TestCase("/umbraco/auth/api-key")]
+    [TestCase("/umbraco/auth/negotiate")]
     public async Task Any_401_to_a_relayed_request_is_sent_as_403_with_the_status_marker(string path)
     {
         Response direct = await SendAsync(_withoutMiddleware, new RequestSpec("direct", "GET", path, 401, [("Authorization", $"Bearer {ValidJwt}")]));
@@ -160,6 +166,22 @@ public class AuthenticationSchemeIsolationTests
             Assert.That(relayed.Status, Is.EqualTo(403));
             Assert.That(relayed.StatusMarker, Is.EqualTo("401"));
             Assert.That(relayed with { Status = 401, StatusMarker = null }, Is.EqualTo(direct));
+        }
+    }
+
+    [TestCase("/auth/jwt", "/umbraco/auth/jwt")]
+    [TestCase("/echo", "/umbraco/echo")]
+    public async Task The_same_backoffice_header_is_relayed_under_umbraco_and_left_alone_outside_it(string outsidePath, string backOfficePath)
+    {
+        (string, string)[] headers = [(BackOfficeHeader, $"Bearer {ValidJwt}")];
+        Response outside = await SendAsync(_withMiddleware, new RequestSpec("outside", "GET", outsidePath, 0, headers));
+        Response inside = await SendAsync(_withMiddleware, new RequestSpec("inside", "GET", backOfficePath, 0, headers));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(inside.Status, Is.EqualTo(200));
+            Assert.That(inside.Body, Does.Not.Contain("restored=False"), "Relayed under /umbraco");
+            Assert.That(outside.Body, Does.Not.Contain("restored=True"), "Not relayed outside /umbraco");
         }
     }
 
@@ -268,9 +290,15 @@ public class AuthenticationSchemeIsolationTests
                     app.UseAuthorization();
                     app.UseEndpoints(endpoints =>
                     {
-                        foreach ((string path, string scheme) in new[] { ("jwt", "Jwt"), ("cookie", "Cookies"), ("api-key", "ApiKey"), ("basic", "Basic"), ("negotiate", "Negotiate") })
+                        // Every endpoint exists outside and under /umbraco: only requests under /umbraco are relayed.
+                        foreach (string prefix in new[] { string.Empty, BackOfficePrefix })
                         {
-                            endpoints.MapGet($"/auth/{path}", Describe).RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = scheme });
+                            foreach ((string path, string scheme) in new[] { ("jwt", "Jwt"), ("cookie", "Cookies"), ("api-key", "ApiKey"), ("basic", "Basic"), ("negotiate", "Negotiate") })
+                            {
+                                endpoints.MapGet($"{prefix}/auth/{path}", Describe).RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = scheme });
+                            }
+
+                            endpoints.MapMethods($"{prefix}/echo", ["GET", "POST"], Echo);
                         }
 
                         endpoints.MapPost("/cookie/sign-in", (HttpContext context) =>
@@ -287,13 +315,6 @@ public class AuthenticationSchemeIsolationTests
                                 ? """{"signedIn":true}"""
                                 : """{"type":"Error","title":"Invalid credentials","status":401,"detail":"The provided credentials are invalid. User has not been signed in."}""");
                         });
-
-                        endpoints.MapMethods("/echo", ["GET", "POST"], async (HttpContext context) =>
-                        {
-                            string body = await new StreamReader(context.Request.Body).ReadToEndAsync();
-                            IEnumerable<string> headers = context.Request.Headers.OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase).Select(h => $"{h.Key}={h.Value}");
-                            return $"{Describe(context)}\n{string.Join("\n", headers)}\nbody={body}";
-                        });
                     });
                 }))
             .Build();
@@ -304,6 +325,13 @@ public class AuthenticationSchemeIsolationTests
 
     private static string Describe(HttpContext context)
         => $"user={context.User.Identity?.AuthenticationType}:{context.User.Identity?.Name} restored={context.Items.ContainsKey(WindowsAuthenticationDefaults.AppliedItemKey)}";
+
+    private static async Task<string> Echo(HttpContext context)
+    {
+        string body = await new StreamReader(context.Request.Body).ReadToEndAsync();
+        IEnumerable<string> headers = context.Request.Headers.OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase).Select(h => $"{h.Key}={h.Value}");
+        return $"{Describe(context)}\n{string.Join("\n", headers)}\nbody={body}";
+    }
 
     private static string CreateJwt(string subject)
         => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor

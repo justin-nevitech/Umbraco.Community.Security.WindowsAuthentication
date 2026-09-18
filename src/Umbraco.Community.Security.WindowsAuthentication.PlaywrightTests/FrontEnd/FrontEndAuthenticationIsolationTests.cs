@@ -211,22 +211,46 @@ public class FrontEndAuthenticationIsolationTests(Hosting hosting) : PlaywrightT
     }
 
     [Test]
-    public async Task Custom_jwt_scheme_called_from_the_backoffice_is_passed_through_transparently()
+    public async Task Custom_jwt_scheme_called_from_the_backoffice_is_left_alone()
     {
         using HttpClient anonymousClient = new(new HttpClientHandler { ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator, UseDefaultCredentials = Site.UsesWindowsAuthentication }) { BaseAddress = Site.BaseUrl };
         string jwt = await IssueJwtAsync(anonymousClient);
 
         await using BackofficeSession session = await BackofficeSession.SignInAsync(Site, await NewBrowserContextAsync());
         JsonElement result = await session.EvaluateAsync(
-            "jwt => fetch('/api/test-auth/jwt', { headers: { Authorization: `Bearer ${jwt}` } }).then(async r => ({ status: r.status, body: await r.json() }))",
+            """
+            async jwt => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 10000);
+                try {
+                    const response = await fetch('/api/test-auth/jwt', { headers: { Authorization: `Bearer ${jwt}` }, signal: controller.signal });
+                    return { status: response.status, body: response.ok ? await response.json() : null };
+                } catch {
+                    return { status: -1, body: null };
+                } finally {
+                    clearTimeout(timer);
+                }
+            }
+            """,
             jwt);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.GetProperty("status").GetInt32(), Is.EqualTo(200));
-            Assert.That(result.GetProperty("body").GetProperty("name").GetString(), Is.EqualTo("front-end-user"));
-            Assert.That(result.GetProperty("body").GetProperty("authorizationRestored").GetBoolean(), Is.True);
-            Assert.That(session.Network.BearerRequests, Is.Empty);
+            // The API lives outside /umbraco, so the client script sends the page's bearer header exactly as it was set.
+            Assert.That(session.Network.BearerRequests, Has.Some.Contains("/api/test-auth/jwt"));
+            Assert.That(session.Network.RelayedRequests, Has.None.Contains("/api/test-auth/jwt"));
+
+            if (Site.UsesWindowsAuthentication)
+            {
+                // Behind Windows authentication IIS refuses any script-set Authorization header, with or without the package.
+                Assert.That(result.GetProperty("status").GetInt32(), Is.AnyOf(401, -1));
+            }
+            else
+            {
+                Assert.That(result.GetProperty("status").GetInt32(), Is.EqualTo(200));
+                Assert.That(result.GetProperty("body").GetProperty("name").GetString(), Is.EqualTo("front-end-user"));
+                Assert.That(result.GetProperty("body").GetProperty("authorizationRestored").GetBoolean(), Is.False);
+            }
         }
     }
 

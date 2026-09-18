@@ -9,7 +9,7 @@
       "type": "appEntryPoint",
       "alias": "Umbraco.Community.Security.WindowsAuthentication.AppEntryPoint",
       "name": "Windows Authentication",
-      "js": "/App_Plugins/WindowsAuthentication/windows-authentication-JVeUi8wP.js"
+      "js": "/App_Plugins/WindowsAuthentication/windows-authentication-BstNM8FV.js"
     }
   ]
 }

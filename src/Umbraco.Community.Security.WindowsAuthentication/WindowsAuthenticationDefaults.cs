@@ -15,6 +15,12 @@ public static class WindowsAuthenticationDefaults
     public const string StatusHeaderName = "X-Umb-Authorization-Status";
 
     /// <summary>
+    /// Only requests under this path are relayed: the Management API, the SignalR hub, preview and package APIs registered with
+    /// <c>[BackOfficeRoute]</c>. Must match <c>BACKOFFICE_PATH</c> in the client script.
+    /// </summary>
+    public const string BackOfficePath = "/umbraco";
+
+    /// <summary>
     /// Set in <see cref="Microsoft.AspNetCore.Http.HttpContext.Items"/> when the middleware restored the Authorization header.
     /// </summary>
     public const string AppliedItemKey = "Umbraco.Community.Security.WindowsAuthentication.Applied";

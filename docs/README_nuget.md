@@ -6,20 +6,21 @@
 
 An Umbraco package that lets the backoffice run behind IIS Windows Authentication with anonymous authentication **disabled**, for intranet and internal sites where IIS must authenticate every request with a Windows account.
 
-The backoffice sends its own `Authorization: Bearer …` header, which IIS needs for the Negotiate/NTLM handshake. The package moves the backoffice token into a separate header in the browser and moves it back on the server before Umbraco authenticates the request. Front-end pages, members, the Delivery API and custom authentication are left untouched.
+The backoffice sends its own `Authorization: Bearer …` header, which IIS needs for the Negotiate/NTLM handshake. Since Umbraco 17 that header only holds a placeholder; the real token lives in an httpOnly cookie. The package moves the placeholder into a separate header in the browser and moves it back on the server before Umbraco authenticates the request. Only requests to Umbraco's own paths under `/umbraco` are touched; front-end pages, members, the Delivery API and custom authentication are left alone.
 
 ## Compatibility
 
-Packaging is **version-aligned** — the package major matches your Umbraco major:
+Packaging is **version-aligned**: the package major matches your Umbraco major.
 
 | Umbraco | Package version | Status |
 |---------|-----------------|--------|
 | 17.x    | `17.x`          | ✅ Supported (requires Umbraco 17.5.0+) |
 | 18.x    | `18.x`          | ✅ Supported |
+| 19.x    | not needed      | Umbraco 19 relies on cookies only, so the problem goes away |
 
-Umbraco 17.4.0–17.4.2 start the backoffice router without waiting for app entry points, so the package's client script could lose a race with the first backoffice requests. The package therefore requires Umbraco 17.5.0 or later on the 17.x line. Each major is compiled against its lowest supported Umbraco release (17.5.0 and 18.0.0) and tested end to end on the latest one (17.6.2 and 18.1.1).
+Umbraco 17.4.0 to 17.4.2 start the backoffice router without waiting for app entry points, so the package's client script could lose a race with the first backoffice requests. The package therefore requires Umbraco 17.5.0 or later on the 17.x line. Each major is compiled against its lowest supported Umbraco release (17.5.0 and 18.0.0) and tested end to end on the latest one (17.6.2 and 18.1.1).
 
-> **Pin the major when installing.** Both majors publish under the same package ID, and NuGet resolves the *latest* version rather than the one matching your Umbraco major — so a bare `dotnet add package` on an Umbraco 17 site will pull the `18.x` package and fail with a `NU1107` version conflict.
+> **Pin the major when installing.** Both majors publish under the same package ID, and NuGet resolves the *latest* version rather than the one matching your Umbraco major, so a bare `dotnet add package` on an Umbraco 17 site will pull the `18.x` package and fail with a `NU1107` version conflict.
 
 ## Quick Start
 
@@ -38,10 +39,10 @@ Then, in IIS, disable anonymous authentication and enable Windows Authentication
 ## Features
 
 - The backoffice works behind IIS with anonymous authentication disabled and Windows Authentication enabled
-- Covers core Management API calls, package API clients, uploads and SignalR
+- Covers core Management API calls, package APIs under `/umbraco`, uploads and SignalR
 - Umbraco's own re-login appears when a backoffice session ends, instead of a Windows credentials prompt
 - A failed backoffice sign-in shows Umbraco's "couldn't log you in" message, instead of a Windows credentials prompt
-- Only backoffice requests are affected: front-end, member, Delivery API and custom authentication are untouched
+- Only requests to Umbraco's own paths under `/umbraco` are affected: front-end, member, Delivery API and custom authentication are untouched
 - Harmless on a site without Windows Authentication
 - Tested end to end on Umbraco 17 and 18, under IIS Express with Windows Authentication and under Kestrel
 
@@ -61,6 +62,10 @@ Browsers must trust the site for Windows sign-in, or they prompt for credentials
 
 Any reverse proxy must forward the `X-Umb-Authorization` request header and `X-Umb-Authorization-Status` response header. Set the `Umbraco.Community.Security.WindowsAuthentication` log level to `Debug` to log each decision.
 
+## What changes on the wire
+
+IIS adds its Windows challenge to every 401, so the package sends two kinds of backoffice 401 under a different status code: a 401 to a relayed backoffice request (an expired session, for example) goes out as `403`, and a failed sign-in behind Windows Authentication goes out as `400`. Both carry `X-Umb-Authorization-Status: 401`. Backoffice code still sees the original 401, but IIS logs, APM, WAF rules and browser devtools see the 403 or 400, so filter on that header if you monitor 401s or 403s. Every other response is unchanged.
+
 ## Author
 
 Created and maintained by [Justin Neville](https://www.nevitech.co.uk) at
@@ -68,7 +73,7 @@ Created and maintained by [Justin Neville](https://www.nevitech.co.uk) at
 
 ## Documentation
 
-Full documentation and source code available on [GitHub](https://github.com/justin-nevitech/Umbraco.Community.Security.WindowsAuthentication).
+Full documentation and source code available on [GitHub](https://github.com/justin-nevitech/Umbraco.Community.Security.WindowsAuthentication), including an alternative two-zone IIS setup for sites with server-level access.
 
 ---
 

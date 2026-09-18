@@ -84,7 +84,7 @@ src/
 
 ## Guidelines
 
-- The package must only ever affect backoffice requests. Any change to the server rules or the client script needs tests proving that front-end, member, Delivery API and custom authentication are untouched
+- The package must only ever affect backoffice requests to paths under `/umbraco`, on both the client and the server (keep `BACKOFFICE_PATH` and `WindowsAuthenticationDefaults.BackOfficePath` in step). Any change to the server rules or the client script needs tests proving that front-end, member, Delivery API and custom authentication are untouched
 - Keep the client script free of dependencies and imports: it has to install before the backoffice sends its first authenticated request
 - Run the Playwright tests under IIS Express with Windows Authentication for any change, on both Umbraco majors
 - Follow the existing code style and patterns

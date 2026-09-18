@@ -147,7 +147,7 @@ Between them the suites cover both ends of each supported range: the unit test p
 the package projects, so they compile and run against each major's floor (17.5.0 and 18.0.0), while
 the Playwright tests run the package inside the latest release of each major (17.6.2 and 18.1.1).
 
-**Unit tests** cover the server rules (including the failed sign-in rule), the middleware and composer, a real ASP.NET Core
+**Unit tests** cover the server rules (including the `/umbraco` path scope and the failed sign-in rule), the middleware and composer, a real ASP.NET Core
 stack with other authentication schemes run with and without the middleware, and the built client script
 loaded into a real browser. The client script run fails if any block of the script never executed.
 

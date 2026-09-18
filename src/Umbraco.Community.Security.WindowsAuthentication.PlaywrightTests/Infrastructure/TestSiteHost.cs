@@ -93,6 +93,9 @@ public abstract class TestSiteHost : IAsyncDisposable
         ["ConnectionStrings__umbracoDbDSN"] = $"Data Source={Path.Combine(RunDirectory, "Umbraco.sqlite.db")};Cache=Shared;Foreign Keys=True;Pooling=True",
         ["ConnectionStrings__umbracoDbDSN_ProviderName"] = "Microsoft.Data.Sqlite",
         ["Umbraco__CMS__Hosting__LocalTempStorageLocation"] = "EnvironmentTemp",
+        // The default factory keeps Examine indexes under the site folder, which every host shares; hosts run side by side,
+        // so they would corrupt each other's Lucene files. This one follows LocalTempStorageLocation into the run directory.
+        ["Umbraco__CMS__Examine__LuceneDirectoryFactory"] = "TempFileSystemDirectoryFactory",
         ["Umbraco__CMS__Logging__Directory"] = Path.Combine(RunDirectory, "logs"),
         ["Umbraco__CMS__Global__UmbracoMediaPhysicalRootPath"] = Directory.CreateDirectory(Path.Combine(RunDirectory, "media")).FullName,
         ["TMP"] = Directory.CreateDirectory(Path.Combine(RunDirectory, "temp")).FullName,

@@ -31,6 +31,33 @@ public class FetchTests : ClientScriptBrowserTest
         }
     }
 
+    [TestCase("/api/a", TestName = "Front-end API path")]
+    [TestCase("/umbracox/a", TestName = "Path that only starts with umbraco")]
+    [TestCase("/", TestName = "Site root")]
+    public async Task Passes_a_same_origin_bearer_request_outside_umbraco_to_fetch_untouched(string path)
+    {
+        await OpenBackofficeAsync();
+
+        bool sameArguments = await Page.EvaluateAsync<bool>($$"""
+            async () => {
+                const init = { headers: { Authorization: 'Bearer abc' } };
+                window.__fetchCalls.length = 0;
+                await fetch('{{path}}', init);
+                const call = window.__fetchCalls[0];
+                return window.__fetchCalls.length === 1 && call[0] === '{{path}}' && call[1] === init;
+            }
+            """);
+
+        RecordedRequest request = SingleRequest(path);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sameArguments, Is.True, "The client script must pass the original input and init objects to fetch");
+            Assert.That(request.Header("authorization"), Is.EqualTo("Bearer abc"));
+            Assert.That(request.Header("x-umb-authorization"), Is.Null);
+            Assert.That(await RewriteCountsAsync(), Is.EqualTo((0, 0)));
+        }
+    }
+
     [Test]
     public async Task Keeps_every_other_header()
     {
@@ -200,6 +227,39 @@ public class FetchTests : ClientScriptBrowserTest
         {
             Assert.That(request.Header("x-umb-authorization"), Is.EqualTo("Bearer abc"));
             Assert.That(request.Header("authorization"), Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task Matches_the_backoffice_path_case_insensitively()
+    {
+        await OpenBackofficeAsync();
+
+        await Page.EvaluateAsync("() => fetch('/UMBRACO/Management/API/a', { headers: { Authorization: 'Bearer abc' } }).then(r => r.status)");
+
+        RecordedRequest request = SingleRequest("/UMBRACO/Management/API/a");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(request.Header("x-umb-authorization"), Is.EqualTo("Bearer abc"));
+            Assert.That(request.Header("authorization"), Is.Null);
+            Assert.That(await RewriteCountsAsync(), Is.EqualTo((1, 0)));
+        }
+    }
+
+    [TestCase("/api/a", TestName = "Server url path outside /umbraco")]
+    [TestCase("/umbracox/a", TestName = "Server url path that only starts with umbraco")]
+    public async Task Leaves_a_server_url_request_outside_umbraco_alone(string path)
+    {
+        await OpenBackofficeAsync(serverUrl: ServerOrigin);
+
+        await Page.EvaluateAsync($"() => fetch('{ServerOrigin}{path}', {{ headers: {{ Authorization: 'Bearer abc' }} }}).then(r => r.status)");
+
+        RecordedRequest request = SingleRequest(ServerOrigin, path);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(request.Header("authorization"), Is.EqualTo("Bearer abc"));
+            Assert.That(request.Header("x-umb-authorization"), Is.Null);
+            Assert.That(await RewriteCountsAsync(), Is.EqualTo((0, 0)));
         }
     }
 
